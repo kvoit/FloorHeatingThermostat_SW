@@ -348,3 +348,9 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+.pio/
+.travis.yml
+.vscode/
+BaseConfigDef.h
+BaseConfig.h

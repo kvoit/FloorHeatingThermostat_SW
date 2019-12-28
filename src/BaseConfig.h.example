@@ -1,0 +1,15 @@
+#pragma once
+
+#include <BaseConfigDef.h>
+
+const char *ssid = "SSID";
+const char *password = "PASSWORD";
+
+const char *ota_password = "tessin";
+
+const char *device_name     = "therm" DEVICE;
+const char *mqtt_server     = "mqtt.example.net";
+const char *mqtt_user       = "username";
+const char *mqtt_pw         = "password";
+
+const char *mqtt_topic_base = "myhome/" TOPIC "/thermostat/";
