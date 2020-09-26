@@ -14,6 +14,7 @@
 #include <RemoteDebug.h>
 #include <INTERVAL.h>
 #include <MqttController.hpp>
+#include <Beeper.hpp>
 
 #include <BMEFunctions.h>
 #include <NetworkFunctions.h>
@@ -36,9 +37,16 @@ void mqtt_callback_func(const char* topic, const byte* payload, unsigned int len
 
 Bsec bme;
 
+Beeper beeper(13);
+
 uint32_t loopstart;
 uint32_t loopduration = 0;
 char m_str[11] = {};
+
+uint8_t pressurehist_pointer = 0;
+const uint8_t pressurehist_LEN = 15;
+const uint8_t pressurehist_DROP = 40; //Pa
+float pressurehist[pressurehist_LEN] = {200000.0};
 
 IPAddress ip( 10,166,70,LOWIP );
 IPAddress gateway( 10, 166, 64, 1 );
@@ -59,8 +67,9 @@ void setup(void) {
   adc_power_off();
 
   Serial.begin(115200);	
-  Wire.begin(); 
-
+  Wire.setClock(100000);
+  Wire.begin();
+  
   u8g2.begin();
   u8g2.setDisplayRotation(U8G2_R2);
   u8g2.clearBuffer();          
@@ -76,12 +85,17 @@ void setup(void) {
   startOTA(device_name, ota_password);
   beginRemoteDebug(device_name);
   
+  // pinMode(13,OUTPUT);
+  // digitalWrite(13,HIGH);
+  // delay(1000);
+  // digitalWrite(13,LOW);
+
   // Wait for debug connections
   while(millis()<30000) {
     ArduinoOTA.handle();
     Debug.handle();
     INTERVAL(1000,millis()) {
-      debugI("Initial wait %lu",millis());
+      debugI("Initial wait %lu, %s",millis(),WiFi.macAddress().c_str());
       Serial.print(".");
     }
   }
@@ -93,63 +107,88 @@ void setup(void) {
   // Dim display
   u8x8_cad_StartTransfer(u8g2.getU8x8());
   u8x8_cad_SendCmd( u8g2.getU8x8(), 0xD9);
-  u8x8_cad_SendArg( u8g2.getU8x8(), 5);  //max 34
+  u8x8_cad_SendArg( u8g2.getU8x8(), DISPLAY_BRIGHTNESS);  //max 34
   u8x8_cad_EndTransfer(u8g2.getU8x8());
+
+  beeper.begin();
+  beeper.beep(1000);
+  while(beeper.handle()) {delay(10);};
 }
 
 void loop() 
 {
-  loopstart = millis();
+  // loopstart = millis();
 
-  if (bme.run()) { // If new data is available
-    u8g2.setColorIndex(1);
-    u8g2.setFont(u8g2_font_7x14_mf);
+  ArduinoOTA.handle();
+  Debug.handle();
+  mqtt_controller.handle();
+  beeper.handle();
 
-    sprintf(m_str, " %.2fC", bme.temperature);
-    u8g2.drawStr(36,15,m_str); 
+  INTERVAL(100,millis()) {
+    if (bme.run()) { // If new data is available
+      
+      u8g2.setColorIndex(1);
+      u8g2.setFont(u8g2_font_7x14_mf);
 
-    sprintf(m_str, " %.2f%%", bme.humidity);
-    u8g2.drawStr(36,31,m_str); 
-
-    if (bme.staticIaq<10) {
-      sprintf(m_str, "  %.2f", bme.staticIaq);
-    } else if (bme.staticIaq<100) {
-      sprintf(m_str, " %.2f", bme.staticIaq);
-    } else {
-      sprintf(m_str, "%.2f", bme.staticIaq);
-    }
-    u8g2.drawStr(36,45,m_str); 
-
-    INTERVAL(120000,millis())
-    {
-      startNetwork(ssid,password,device_name,ip,gateway,subnet,dns1);
-      delay(1);
-      // pubsubclient.setCallback(mqtt_callback_func);
-      mqtt_controller.handle();
-      publishBME(pubsubclient,bme,mqtt_topic_base);
-      mqtt_controller.handle();
-      pubsubclient.disconnect(); 
-      espClient.flush();
-      // wait until connection is closed completely
-      while( pubsubclient.state() != -1){  
-          delay(1);
+      sprintf(m_str, " %.2fC", bme.temperature);
+      u8g2.drawStr(36,15,m_str); 
+      
+      sprintf(m_str, " %.2f%%", bme.humidity);
+      u8g2.drawStr(36,29,m_str); 
+      
+      if (bme.staticIaq<10) {
+        sprintf(m_str, "  %.2f", bme.staticIaq);
+      } else if (bme.staticIaq<100) {
+        sprintf(m_str, " %.2f", bme.staticIaq);
+      } else {
+        sprintf(m_str, "%.2f", bme.staticIaq);
       }
-    }
-  } else {
-    checkBME(bme);
-  }
-  delay(1);
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-  btStop();
-  adc_power_off();
-  esp_wifi_stop();
-  esp_bt_controller_disable();
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+      u8g2.drawStr(36,43,m_str); 
 
-  sprintf(m_str, "%lu", loopduration);
-  writeLeftBottom(m_str); 
-  u8g2.sendBuffer();
-  loopduration = millis()-loopstart;
-  esp_light_sleep_start();
+      sprintf(m_str, " %.0fPa", bme.pressure);
+      u8g2.drawStr(30,57,m_str); 
+
+      if(bme.pressure < pressurehist[(pressurehist_pointer+1)%pressurehist_LEN]-pressurehist_DROP) {
+        beeper.beep(500);
+      }
+      debugV("%01d: %.0f - %01d: %.0f", pressurehist_pointer, bme.pressure , (pressurehist_pointer+1)%pressurehist_LEN, pressurehist[(pressurehist_pointer+1)%pressurehist_LEN]);
+      pressurehist[pressurehist_pointer] = bme.pressure;
+      pressurehist_pointer = (pressurehist_pointer+1)%pressurehist_LEN;
+      
+
+      INTERVAL(120000,millis())
+      {
+        // startNetwork(ssid,password,device_name,ip,gateway,subnet,dns1);
+        // delay(1);
+        // pubsubclient.setCallback(mqtt_callback_func);
+        mqtt_controller.handle();
+        publishBME(pubsubclient,bme,mqtt_topic_base);
+        mqtt_controller.handle();
+        // pubsubclient.disconnect(); 
+        // espClient.flush();
+        // // wait until connection is closed completely
+        // while( pubsubclient.state() != -1){  
+        //     delay(1);
+        // }
+      }
+    } else {
+      // checkBME(bme);
+    }
+  }
+  // delay(1);
+  // WiFi.disconnect(true);
+  // WiFi.mode(WIFI_OFF);
+  // btStop();
+  // adc_power_off();
+  // esp_wifi_stop();
+  // esp_bt_controller_disable();
+  // esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  INTERVAL(1000,millis()) {
+    sprintf(m_str, "%lu", loopduration);
+    writeLeftBottom(m_str); 
+    u8g2.sendBuffer();
+  }
+
+  // loopduration = millis()-loopstart;
+  // esp_light_sleep_start();
 }

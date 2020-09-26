@@ -73,7 +73,7 @@ void publishBME(PubSubClient &pubsubclient, Bsec &bme, const char* mqtt_topic_ba
 
 void configureBME(Bsec &bme, uint8_t i2c) {
   bme.begin(i2c, Wire);
-  bme.setTemperatureOffset(0.7);
+  bme.setTemperatureOffset(TEMPERATURE_OFFSET);
 
   const uint8_t bsec_config_iaq[] = {
     #include "config/generic_33v_3s_28d/bsec_iaq.txt"

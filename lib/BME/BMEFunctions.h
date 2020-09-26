@@ -2,6 +2,7 @@
 
 #include "bsec.h"
 #include <PubSubClient.h>
+#include "../../src/BaseConfigDef.h"
 
 // Helper functions declarations
 void checkIaqSensorStatus(void);
