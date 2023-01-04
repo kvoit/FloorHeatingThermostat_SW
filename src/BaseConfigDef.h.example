@@ -1,0 +1,17 @@
+#pragma once
+
+#ifndef UNITCONFIG
+#define UNITCONFIG 6 
+#endif
+
+#if UNITCONFIG == 1
+#define LOWIP 11
+#define TOPIC "room1"
+#define DEVICE "r1"
+#elif UNITCONFIG == 2
+#define LOWIP      12
+#define TOPIC   "room2"
+#define DEVICE  "r2"
+#else
+#error "Unknown unit"
+#endif
