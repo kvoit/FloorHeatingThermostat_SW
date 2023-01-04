@@ -354,3 +354,4 @@ MigrationBackup/
 .vscode/
 
 src/BaseConfig.h
+platformio.ini
