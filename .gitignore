@@ -352,5 +352,5 @@ MigrationBackup/
 .pio/
 .travis.yml
 .vscode/
-BaseConfigDef.h
-BaseConfig.h
+
+src/BaseConfig.h
